@@ -2402,14 +2402,16 @@ export class CellListComponent implements OnInit, OnDestroy, DoCheck {
         xAcgArray.push((acg['t_start'] + (increment * Number(item))) * 1000);
       }
       // console.log('xAcgArray: ', xAcgArray);
-      this.autocorrelogramLookup[acg['cluster_id']]['data'][0]['x'] = xAcgArray;
+      this.autocorrelogramLookup[acg['cluster_id']]['data'][0]['x'] = xAcgArray;      
       this.autocorrelogramLookup[acg['cluster_id']]['data'][0]['y'] = acg['acg'].split(',');
       this.autocorrelogramLookup[acg['cluster_id']]['layout']['yaxis']['range'] = acg['plot_ylim']
 
       // original sizing : 400 height / 580 width
       this.autocorrelogramLookup[acg['cluster_id']]['layout']['width'] = "520";
     }
-
+    // console.log(`x: ${this.autocorrelogramLookup[0]['data'][0]['x']}`);
+    // console.log(`y: ${this.autocorrelogramLookup[0]['data'][0]['y']}`);
+    // console.log(`range: ${this.autocorrelogramLookup[0]['layout']['yaxis']['range']}`);
   }
 
   updateWaveformPlot(WFdata) {

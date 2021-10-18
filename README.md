@@ -110,3 +110,6 @@ make sure to move over to the `master` branch by `git checkout master`
 `docker-compose -f docker-compose-deploy.yml up -d`
 
 -------------------------------------
+
+
+https://stackoverflow.com/questions/68215448/updated-angular-project-to-version-12-from-9-after-that-module-using-plotly-js
