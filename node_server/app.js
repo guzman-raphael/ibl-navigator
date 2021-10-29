@@ -220,8 +220,42 @@ app.post('/sessions', checkAuth, cacheMiddleware(15*60), (req, res) => {
         //     '__page': req.query.__page[0]
         //   })
         res.send(body);
-    })
-})
+    });
+});
+
+app.post('/sessions-filter-options', checkAuth, cacheMiddleware(15*60), (req, res) => {
+    // console.log('posting to filter session page');
+    console.log('\n\n\n\nreq.body: \n\n\n\n', req.body);
+    console.log('type: ', typeof req.body);
+    // console.log('\n\n\n\nlimit value\n\n\n', req.query)
+    // console.log('\n\n\n\nlimit value\n\n\n', req.query.__limit[0])
+    // console.log('\n\n\n\npage value\n\n\n', req.query.__page[0])
+    // console.log('\n\n\n\norder value\n\n\n', req.query.__order)
+    // console.log('\n\n\n\n\n\nparams\n\n\n\n\n\n\n', req.params)
+    // res.append('__limit', req.query.__limit[0])
+    // res.append('__page', req.query.__page[0])
+    // res.append('__order', req.body)
+    // res.set({
+    //     '__limit': req.query.__limit[0],
+    //     '__page': req.query.__page[0]
+    //     })
+    request.post(flask_backend + '/v0/_q/sessionpage-filter-options', { form: req.body }, function (error, httpResponse, body) {
+        if (error) {
+            console.error('error [session list fetch]: ', error);
+            res.status(500).end();
+            return;
+        }
+        // console.log(body);
+        // res.append('__limit', req.query.__limit[0])
+        // res.append('__page', req.query.__page[0])
+        // res.append('__order', req.body)
+        // res.set({
+        //     '__limit': req.query.__limit[0],
+        //     '__page': req.query.__page[0]
+        //   })
+        res.send(body);
+    });
+});
 
 app.get('/mice', checkAuth, (req, res) => {
     // setup for proxy server

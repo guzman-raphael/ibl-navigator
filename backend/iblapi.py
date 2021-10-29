@@ -55,6 +55,8 @@ histology = mkvmod('histology')
 # test_histology = test_mkvmod('histology')
 original_max_join_size = dj.conn().query(
     "show variables like 'max_join_size'").fetchall()[0][1]
+original_group_concat_max_len = dj.conn().query(
+    "show variables like 'group_concat_max_len'").fetchall()[0][1]
 
 dj.config['stores'] = {
     'ephys': dict(
@@ -102,6 +104,8 @@ class DateTimeEncoder(json.JSONEncoder):
             return str(o)
         if type(o) in self.npmap:
             return self.npmap[type(o)](o)
+        if isinstance(o, bytes):
+            return o.hex()
         return json.JSONEncoder.default(self, o)
 
     @classmethod
@@ -231,7 +235,7 @@ def handle_q(subpath, args, proj, fetch_args=None, **kwargs):
     fetch_args = {} if fetch_args is None else fetch_args
     ret = []
     post_process = None
-    if subpath == 'sessionpage':
+    if subpath == 'sessionpage' or subpath == 'sessionpage-filter-options':
         print('type of args: {}'.format(type(args)))
         sess_proj = acquisition.Session().aggr(
             acquisition.SessionProject().proj('session_project', dummy2='"x"')
@@ -274,25 +278,59 @@ def handle_q(subpath, args, proj, fetch_args=None, **kwargs):
         #       subject.SubjectLab() * subject.SubjectUser() *
         #       analyses_behavior.SessionTrainingStatus()) & args & brain_restriction)
 
-        q = ((acquisition.Session() * sess_proj * psych_curve * ephys_data * subject.Subject() *
-              subject.SubjectLab() * subject.SubjectUser() * trainingStatus) & args & brain_restriction)
-        
-        # newLimit = int(request.args.get("limit", 10))
-        # page = int(request.args.get("page", 1))
+        q = (acquisition.Session() * sess_proj * psych_curve * ephys_data * subject.Subject() *
+             subject.SubjectLab() * subject.SubjectUser() * trainingStatus)
 
-        app.logger.info('\n\n\n\n\nFetch Args: {}\n\n\n\n'.format(fetch_args))
-        q = q.proj(*proj) if proj else q
-        
-        dj.conn().query("SET SESSION max_join_size={}".format('18446744073709551615'))
-        # q = q.proj(*proj).fetch(limit=newLimit, offset=(page-1)*limit, **fetch_args) if proj else q.fetch(limit=newLimit, offset=(page-1)*limit, **fetch_args)
-        
-        ret_count = len(q)
+        if subpath == 'sessionpage':
+            q = q & args & brain_restriction
+            # newLimit = int(request.args.get("limit", 10))
+            # page = int(request.args.get("page", 1))
 
-        ret = q.fetch(**fetch_args) 
+            app.logger.info('\n\n\n\n\nFetch Args: {}\n\n\n\n'.format(fetch_args))
+            q = q.proj(*proj) if proj else q
+            
+            dj.conn().query("SET SESSION max_join_size={}".format('18446744073709551615'))
+            # q = q.proj(*proj).fetch(limit=newLimit, offset=(page-1)*limit, **fetch_args) if proj else q.fetch(limit=newLimit, offset=(page-1)*limit, **fetch_args)
+            
+            ret_count = len(q)
 
-        dj.conn().query("SET SESSION max_join_size={}".format(original_max_join_size))
+            ret = q.fetch(**fetch_args) 
 
-        return dumps({"records_count": ret_count, "records": ret})
+            dj.conn().query("SET SESSION max_join_size={}".format(original_max_join_size))
+
+            return dumps({"records_count": ret_count, "records": ret})
+        elif subpath == 'sessionpage-filter-options':
+            options_limit = 50  # or None
+            delimiter = ','
+            sql_template_options = """
+            (
+                SELECT GROUP_CONCAT(distinct_{attribute}.{attribute} SEPARATOR '{delimiter}') as {attribute}_options
+                FROM ({distinct_query} {limit}) as distinct_{attribute}
+            ) as {attribute}_options{suffix}
+            """
+            dj.conn().query("SET SESSION group_concat_max_len={}".format('18446744073709551615'))
+            dj.conn().query("SET SESSION max_join_size={}".format('18446744073709551615'))
+            results = dj.conn().query(
+                "SELECT " + delimiter.join([
+                    delimiter.join([
+                        sql_template_options.format(
+                            suffix='', attribute=attribute, delimiter=delimiter,
+                            limit=f"LIMIT {options_limit}" if options_limit else '',
+                            distinct_query=(dj.U(attribute) & (q & args & brain_restriction)).make_sql()),
+                        sql_template_options.format(
+                            suffix='_all', attribute=attribute, delimiter=delimiter,
+                            limit=f"LIMIT {options_limit}" if options_limit else '',
+                            distinct_query=(dj.U(attribute) & q).make_sql())])
+                    for attribute in q.heading.attributes]),
+                as_dict=True).fetchone()
+            dj.conn().query("SET SESSION group_concat_max_len={}".format(original_group_concat_max_len))
+            dj.conn().query("SET SESSION max_join_size={}".format(original_max_join_size))
+            ter = dumps(dict(all_options={k[:-12]: v.split(delimiter.encode() if k in ['session_uuid', 'subject_uuid'] else delimiter)
+                                          for k, v in results.items() if '_all' in k},
+                        options={k[:-8]: v.split(delimiter.encode() if k in ['session_uuid', 'subject_uuid'] else delimiter)
+                                 for k, v in results.items() if '_all' not in k}))
+            print(f'ter: {ter}', flush=True)
+            return ter
     elif subpath == 'subjpage':
         proj_restr = None
         for e in args:
